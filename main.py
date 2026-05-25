@@ -1,29 +1,27 @@
-limport requests
-import json
-import subprocess
+from kivy.app import App
+from kivy.uix.button import Button
+from kivy.uix.label import Label
+from kivy.uix.boxlayout import BoxLayout
+import requests
 
-class CerebroSupremo:
-    def __init__(self, api_url="http://localhost:5001/api/v1/generate"):
-        self.api_url = api_url
+class MeuApp(App):
+    def build(self):
+        self.layout = BoxLayout(orientation='vertical')
+        self.btn = Button(text="Gerar História")
+        self.btn.bind(on_press=self.gerar)
+        self.label = Label(text="Pressione para começar")
+        self.layout.add_widget(self.btn)
+        self.layout.add_widget(self.label)
+        return self.layout
 
-    def pensar(self, prompt):
-        print("[Status] O cérebro está processando...")
-        payload = {
-            "prompt": f"Atue como um diretor de anime. {prompt}",
-            "max_length": 500
-        }
+    def gerar(self, instance):
         try:
-            response = requests.post(self.api_url, json=payload)
-            return response.json()["results"][0]["text"]
-        except Exception as e:
-            return f"Erro ao conectar no KoboldCPP: {e}"
+            resposta = requests.post("http://localhost:5001/api/v1/generate", json={"prompt": "Crie uma história curta"})
+            texto = resposta.json()["results"][0]["text"]
+            self.label.text = texto
+        except:
+            self.label.text = "Erro ao conectar"
 
-if __name__ == "__main__":
-    cerebro = CerebroSupremo()
-    tema = "Samurai Cyberpunk em Neo-Tokyo"
-    roteiro = cerebro.pensar(f"Crie um roteiro de 3 cenas para: {tema}")
-    print("\n--- ROTEIRO GERADO ---")
-    print(roteiro)
-    with open("roteiro_final.json", "w", encoding="utf-8") as f:
-        f.write(roteiro)
+if __name__ == '__main__':
+    MeuApp().run()
 
