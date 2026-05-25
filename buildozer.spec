@@ -1,18 +1,15 @@
-name: Build Android APK
-on: [push]
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Build with Buildozer
-        uses: ArtemSBulgakov/buildozer-action@v1
-        with:
-          command: buildozer android debug
-      - name: Upload APK
-        uses: actions/upload-artifact@v3
-        with:
-          name: meu-apk-final
-          path: bin/*.apk
+[app]
+title = IA Historia para Video
+package.name = iahistoria
+package.domain = org.test
+source.include_exts = py,png,jpg,kv,atlas
+version = 0.1
+requirements = python3,kivy
+orientation = portrait
+
+[buildozer]
+log_level = 2
+warn_on_root = 1
+
 
 
