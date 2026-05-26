@@ -6,18 +6,22 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     container:
       image: kivy/buildozer:latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Install Cython
+        run: |
+          pip install cython
 
       - name: Build APK
         env:
           ANDROIDSDK_ACCEPT_LICENSE: "1"
         run: |
-          # Corrige permissões e compila
-          chown -R user:user .
           buildozer android debug
 
       - name: Upload APK
@@ -25,4 +29,5 @@ jobs:
         with:
           name: DirectorAI-APK
           path: bin/*.apk
+
 
