@@ -1,29 +1,19 @@
+ 
 import requests
 import json
 
 class MotorOrquestracaoVideo:
     def __init__(self, estilo_visual="Cinematico"):
         self.estilo = estilo_visual
-        self.url = "http://localhost:5001/api/v1/generate"
+        # Mude o IP abaixo para o IP do seu computador na rede Wi-Fi
+        self.url = "http://192.168.0.XX:5001/api/v1/generate" 
 
     def gerar_diretrizes_superiores(self, tema):
-        prompt = (
-            "Atue como um Diretor de Cinema. Crie diretrizes para um vídeo impactante sobre: " + tema + ". "
-            "Para cada cena, forneça: "
-            "1. ENQUADRAMENTO. "
-            "2. ILUMINAÇÃO. "
-            "3. NARRATIVA. "
-            "Estruture de forma técnica e profissional."
-        )
-        payload = {"prompt": prompt, "max_length": 1000}
-        response = requests.post(self.url, json=payload)
-        return response.json()["results"][0]["text"]
-
-if __name__ == "__main__":
-    motor = MotorOrquestracaoVideo()
-    tema = input("Qual a história para o vídeo hoje? ")
-    roteiro_superior = motor.gerar_diretrizes_superiores(tema)
-    print(roteiro_superior)
-    with open("orquestracao_video.txt", "w", encoding="utf-8") as f:
-        f.write(roteiro_superior)
-
+        try:
+            prompt = f"Atue como um Diretor de Cinema. Tema: {tema}."
+            payload = {"prompt": prompt, "max_length": 1000}
+            # Adicionamos um timeout para o app não travar se o PC estiver desligado
+            response = requests.post(self.url, json=payload, timeout=10)
+            return response.json()["results"][0]["text"]
+        except Exception as e:
+            return f"Erro de conexão: {str(e)}"
