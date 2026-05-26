@@ -1,56 +1,63 @@
-[app]
+name: Android Build
 
-title = DirectorAI
+on:
+  push:
 
-package.name = directorai
+jobs:
+  build:
 
-package.domain = org.director.ai
+    runs-on: ubuntu-latest
 
-source.dir = .
+    steps:
 
-source.include_exts = py,png,jpg,kv,json,txt
+      - name: Checkout
+        uses: actions/checkout@v4
 
-version = 1.0
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-requirements = python3,kivy,requests,urllib3
+      - name: Install Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
 
-orientation = portrait
+      - name: Install Dependencies
+        run: |
+          sudo apt update
 
-fullscreen = 0
+          sudo apt install -y \
+          git \
+          zip \
+          unzip \
+          openjdk-17-jdk \
+          python3-pip \
+          autoconf \
+          libtool \
+          pkg-config \
+          zlib1g-dev \
+          libncurses5-dev \
+          libncursesw5-dev \
+          cmake \
+          libffi-dev \
+          libssl-dev
 
-android.permissions = INTERNET,WAKE_LOCK
+      - name: Install Buildozer
+        run: |
+          pip install --upgrade pip
+          pip install cython buildozer
 
-android.api = 34
+      - name: Build APK
+        run: |
+          buildozer android debug
 
-android.minapi = 26
-
-android.sdk = 34
-
-android.ndk = 25b
-
-android.accept_sdk_license = True
-
-android.wakelock = True
-
-android.archs = arm64-v8a,armeabi-v7a
-
-log_level = 2
-
-warn_on_root = 0
-
-osx.python_version = 3
-
-osx.kivy_version = 2.2.1
-
-p4a.branch = master
-
-build_dir = .buildozer
-
-[buildozer]
-
-log_level = 2
-
-warn_on_root = 0
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: DirectorAI-APK
+          path: bin/*.apk
 
 
 
