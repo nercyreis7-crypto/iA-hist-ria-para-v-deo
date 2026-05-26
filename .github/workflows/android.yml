@@ -16,9 +16,8 @@ jobs:
         env:
           ANDROIDSDK_ACCEPT_LICENSE: "1"
         run: |
-          # Corrige permissões do diretório de trabalho
+          # Corrige permissões e compila
           chown -R user:user .
-          # Executa o build dentro do container pré-configurado
           buildozer android debug
 
       - name: Upload APK
