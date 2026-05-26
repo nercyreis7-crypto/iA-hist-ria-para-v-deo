@@ -1,3 +1,5 @@
+
+
 name: Android Build
 
 on:
@@ -18,7 +20,6 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt update
-          # Removi libtinfo5 e adicionei libncurses-dev que é o equivalente moderno
           sudo apt install -y \
             git zip unzip openjdk-17-jdk \
             python3-pip autoconf libtool pkg-config zlib1g-dev \
@@ -29,7 +30,7 @@ jobs:
 
       - name: Build APK
         run: |
-          buildozer clean
+          # Removemos o 'buildozer clean' porque ele causa erro em ambientes novos
           buildozer android debug
 
       - name: Upload APK
@@ -37,7 +38,5 @@ jobs:
         with:
           name: DirectorAI-APK
           path: bin/*.apk
-
-
 
 
