@@ -5,27 +5,20 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
+    container:
+      image: kivy/buildozer:latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install Dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y git zip unzip openjdk-17-jdk python3-pip autoconf libtool pkg-config zlib1g-dev libncurses-dev cmake libffi-dev libssl-dev automake m4 libtool-bin
-          pip install --upgrade pip
-          pip install cython buildozer
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Build APK
         env:
           ANDROIDSDK_ACCEPT_LICENSE: "1"
         run: |
-          export LDFLAGS="-L/usr/lib/x86_64-linux-gnu"
+          # Corrige permissões do diretório de trabalho
+          chown -R user:user .
+          # Executa o build dentro do container pré-configurado
           buildozer android debug
 
       - name: Upload APK
