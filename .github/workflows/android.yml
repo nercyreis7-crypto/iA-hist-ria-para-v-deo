@@ -18,19 +18,18 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt update
+          # Removi libtinfo5 e adicionei libncurses-dev que é o equivalente moderno
           sudo apt install -y \
             git zip unzip openjdk-17-jdk \
             python3-pip autoconf libtool pkg-config zlib1g-dev \
-            libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev \
+            libncurses-dev cmake libffi-dev \
             libssl-dev automake m4
           pip install --upgrade pip
           pip install cython buildozer
 
       - name: Build APK
         run: |
-          # Limpa builds anteriores para evitar erros de cache
           buildozer clean
-          # Executa o build
           buildozer android debug
 
       - name: Upload APK
@@ -38,7 +37,6 @@ jobs:
         with:
           name: DirectorAI-APK
           path: bin/*.apk
-
 
 
 
