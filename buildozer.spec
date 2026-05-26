@@ -18,7 +18,7 @@ orientation = portrait
 
 fullscreen = 0
 
-android.permissions = INTERNET,WAKE_LOCK,FOREGROUND_SERVICE,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
+android.permissions = INTERNET,WAKE_LOCK
 
 android.api = 34
 
@@ -31,8 +31,6 @@ android.ndk = 25b
 android.accept_sdk_license = True
 
 android.wakelock = True
-
-android.allow_backup = False
 
 android.archs = arm64-v8a,armeabi-v7a
 
