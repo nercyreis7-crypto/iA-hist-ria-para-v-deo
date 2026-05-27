@@ -14,14 +14,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Cython
+      - name: Install Dependencies
         run: |
+          pip install --upgrade pip
           pip install cython
 
       - name: Build APK
         env:
           ANDROIDSDK_ACCEPT_LICENSE: "1"
+          # Aqui a chave é injetada com segurança
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
+          # Define a variável para o Buildozer ler
+          export GEMINI_API_KEY=$GEMINI_API_KEY
           buildozer android debug
 
       - name: Upload APK
@@ -29,5 +34,6 @@ jobs:
         with:
           name: DirectorAI-APK
           path: bin/*.apk
+
 
 
