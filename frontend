@@ -1,0 +1,8 @@
+/ (raiz do repositório)
+├── /frontend/           (Aqui você coloca os arquivos do seu app Android)
+└── /backend/            (Aqui você coloca seus arquivos de servidor)
+    ├── server.py        (Seu código FastAPI)
+    ├── audio.mp3        (Seu arquivo de áudio)
+    ├── video_base.mp4   (Seu arquivo de vídeo)
+    └── requirements.txt (Suas dependências)
+
