@@ -1,50 +1,47 @@
-import os
-import asyncio
-from fastapi import FastAPI, HTTPException
-from fastapi.staticfiles import StaticFiles
+import threading
+from kivy.app import App
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.button import Button
+from kivy.uix.label import Label
+from kivy.clock import Clock
 import google.generativeai as genai
 
-app = FastAPI()
-
-os.makedirs("static", exist_ok=True)
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
+genai.configure(api_key="AIzaSyAebI0PJGy35buoyYgooiiuZzmOwHb27Ao")
 model = genai.GenerativeModel('gemini-pro')
 
-@app.get("/gerar_video_final")
-async def gerar_video_final(tema: str):
-    audio_path = "audio.mp3"
-    video_path = "video_base.mp4"
-    output_path = "static/final.mp4"
-    
-    if not os.path.exists(audio_path) or not os.path.exists(video_path):
-        return {"status": "erro", "mensagem": "Arquivos de mídia ausentes no servidor."}
+class MotorIsekai:
+    def gerar_historia(self, tema, callback):
+        def tarefa():
+            try:
+                
+                prompt = f"Escreva uma história curta de Isekai épico sobre: {tema}. Use um tom emocionante, descreva o mundo fantástico e o poder especial do protagonista. Divida em 3 cenas curtas."
+                response = model.generate_content(prompt)
+                resultado = response.text
+            except Exception as e:
+                resultado = f"Erro de conexão com o cérebro: {str(e)}"
+            Clock.schedule_once(lambda dt: callback(resultado))
+        threading.Thread(target=tarefa).start()
 
-    try:
-        response = model.generate_content(f"Crie um roteiro técnico de 30s sobre {tema}")
-        roteiro = response.text
-    except Exception as e:
-        return {"status": "erro", "mensagem": f"Erro na IA: {str(e)}"}
+class AppIsekai(App):
+    def build(self):
+        self.motor = MotorIsekai()
+        layout = BoxLayout(orientation='vertical', padding=20, spacing=10)
+        self.lbl = Label(text="Pressione para iniciar sua jornada Isekai", text_size=(300, None))
+        btn = Button(text="Gerar História", size_hint=(1, 0.2), on_press=self.iniciar)
+        layout.add_widget(self.lbl)
+        layout.add_widget(btn)
+        return layout
 
-    cmd = [
-        "ffmpeg", "-y", "-i", audio_path, "-i", video_path, 
-        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "30", 
-        "-s", "640x360", "-pix_fmt", "yuv420p", "-shortest", output_path
-    ]
+    def iniciar(self, instance):
+        self.lbl.text = "Viajando para outro mundo..."
+        self.motor.gerar_historia("Um estudante comum que renasce como um mago das sombras", self.atualizar)
+
+    def atualizar(self, texto):
+        self.lbl.text = texto
+
+if __name__ == "__main__":
+    AppIsekai().run()
+
+
+
     
-    try:
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        stdout, stderr = await process.communicate()
-        
-        if process.returncode != 0:
-            return {"status": "erro", "mensagem": f"FFmpeg falhou: {stderr.decode()}"}
-            
-    except Exception as e:
-        return {"status": "erro", "mensagem": f"Erro ao processar vídeo: {str(e)}"}
-    
-    return {"status": "pronto", "url": "/static/final.mp4", "roteiro": roteiro}
