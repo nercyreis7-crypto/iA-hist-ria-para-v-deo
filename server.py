@@ -1,6 +1,6 @@
 import os
 import asyncio
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.staticfiles import StaticFiles
 import google.generativeai as genai
 
@@ -9,11 +9,18 @@ app = FastAPI()
 os.makedirs("static", exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
-model = genai.GenerativeModel('gemini-pro')
+# REMOVIDO: A configuração global genai.configure() 
+# Agora a configuração será feita dentro de cada requisição (por usuário)
 
 @app.get("/gerar_video_final")
-async def gerar_video_final(tema: str):
+async def gerar_video_final(tema: str, x_api_key: str = Header(...)):
+    # O servidor usa a chave que veio no cabeçalho (Header) do celular do usuário
+    try:
+        genai.configure(api_key=x_api_key)
+        model = genai.GenerativeModel('gemini-pro')
+    except Exception as e:
+        return {"status": "erro", "mensagem": "Chave de API inválida."}
+
     audio_path = "audio.mp3"
     video_path = "video_base.mp4"
     output_path = "static/final.mp4"
@@ -48,4 +55,3 @@ async def gerar_video_final(tema: str):
         return {"status": "erro", "mensagem": f"Erro ao processar vídeo: {str(e)}"}
     
     return {"status": "pronto", "url": "/static/final.mp4", "roteiro": roteiro}
-
