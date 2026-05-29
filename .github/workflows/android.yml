@@ -22,11 +22,11 @@ jobs:
       - name: Build APK
         env:
           ANDROIDSDK_ACCEPT_LICENSE: "1"
-          # Aqui a chave é injetada com segurança
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPCAO_FALA: "ativada"
+          CHAVE_ACESSO_IA: "obrigatoria"
         run: |
-          # Define a variável para o Buildozer ler
-          export GEMINI_API_KEY=$GEMINI_API_KEY
+          echo "OPCAO_FALA=$OPCAO_FALA" >> $GITHUB_ENV
+          echo "CHAVE_ACESSO_IA=$CHAVE_ACESSO_IA" >> $GITHUB_ENV
           buildozer android debug
 
       - name: Upload APK
@@ -34,6 +34,3 @@ jobs:
         with:
           name: DirectorAI-APK
           path: bin/*.apk
-
-
-
