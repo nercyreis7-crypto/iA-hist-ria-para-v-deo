@@ -1,188 +1,63 @@
-from kivy.config import Config
-
-Config.set("graphics", "multisamples", "0")
-Config.set("graphics", "maxfps", "60")
-Config.set("input", "mouse", "mouse,multitouch_on_demand")
-
 import threading
-import requests
-
+import os
 from kivy.app import App
-from kivy.clock import Clock
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.label import Label
-from kivy.uix.scrollview import ScrollView
 from kivy.uix.textinput import TextInput
+from kivy.clock import Clock
+import google.generativeai as genai
 
+class MotorIsekai:
+    def gerar_historia(self, tema, fala, api_key, callback):
+        def tarefa():
+            try:
+                # 1. Função de Limpeza (Validação de Segurança)
+                historia_limpa = tema.replace("#", "")
+                fala_limpa = fala.replace("#", "")
+                
+                # 2. Configuração Dinâmica da Chave do Usuário
+                genai.configure(api_key=api_key)
+                model = genai.GenerativeModel('gemini-pro')
+                
+                prompt = f"História Isekai: {historia_limpa}. Com a fala: {fala_limpa}. Tom emocionante e épico."
+                response = model.generate_content(prompt)
+                resultado = response.text
+            except Exception as e:
+                resultado = f"Erro ao conectar com a IA: {str(e)}"
+            Clock.schedule_once(lambda dt: callback(resultado))
+        threading.Thread(target=tarefa).start()
 
-class DirectorAI(BoxLayout):
-
-    def __init__(self, **kwargs):
-        super().__init__(orientation="vertical", spacing=10, padding=10, **kwargs)
-
-        self.api_ip = TextInput(
-            text="192.168.0.10",
-            hint_text="IP do servidor Flask",
-            multiline=False,
-            size_hint=(1, None),
-            height=60
-        )
-
-        self.tema_input = TextInput(
-            hint_text="Digite o tema do vídeo...",
-            multiline=True,
-            size_hint=(1, None),
-            height=150
-        )
-
-        self.botao = Button(
-            text="Gerar Direção Cinematográfica",
-            size_hint=(1, None),
-            height=70
-        )
-
-        self.botao.bind(on_press=self.iniciar_geracao)
-
-        self.resultado = Label(
-            text="DirectorAI Online",
-            markup=True,
-            size_hint_y=None,
-            valign="top",
-            halign="left"
-        )
-
-        self.resultado.bind(
-            width=self.atualizar_text_size
-        )
-
-        self.resultado.bind(
-            texture_size=self.atualizar_altura
-        )
-
-        scroll = ScrollView(
-            size_hint=(1, 1),
-            do_scroll_x=False,
-            do_scroll_y=True
-        )
-
-        scroll.add_widget(self.resultado)
-
-        self.add_widget(Label(
-            text="IP do Servidor Flask",
-            size_hint=(1, None),
-            height=40
-        ))
-
-        self.add_widget(self.api_ip)
-
-        self.add_widget(Label(
-            text="Tema do Vídeo",
-            size_hint=(1, None),
-            height=40
-        ))
-
-        self.add_widget(self.tema_input)
-
-        self.add_widget(self.botao)
-
-        self.add_widget(scroll)
-
-    def atualizar_text_size(self, *args):
-        self.resultado.text_size = (self.resultado.width - 20, None)
-
-    def atualizar_altura(self, *args):
-        self.resultado.height = self.resultado.texture_size[1] + 30
-
-    def iniciar_geracao(self, instance):
-
-        tema = self.tema_input.text.strip()
-
-        if not tema:
-            self.resultado.text = "[color=ff0000]Digite um tema.[/color]"
-            return
-
-        self.botao.disabled = True
-
-        self.resultado.text = "[color=00ff00]Conectando ao DirectorAI...[/color]"
-
-        thread = threading.Thread(
-            target=self.gerar_direcao,
-            args=(tema,),
-            daemon=True
-        )
-
-        thread.start()
-
-    def gerar_direcao(self, tema):
-
-        try:
-
-            ip = self.api_ip.text.strip()
-
-            url = f"http://{ip}:5001/api/v1/generate"
-
-            prompt = f"""
-            Atue como um Diretor Cinematográfico Profissional.
-
-            Crie diretrizes avançadas para um vídeo sobre:
-
-            {tema}
-
-            Para cada cena forneça:
-
-            1. ENQUADRAMENTO
-            2. ILUMINAÇÃO
-            3. MOVIMENTO DE CÂMERA
-            4. NARRATIVA
-            5. CLIMA CINEMATOGRÁFICO
-            6. ESTILO VISUAL
-            7. TRANSIÇÕES
-            8. DETALHES TÉCNICOS
-
-            Estruture tudo profissionalmente.
-            """
-
-            payload = {
-                "prompt": prompt,
-                "max_length": 1000
-            }
-
-            response = requests.post(
-                url,
-                json=payload,
-                timeout=120
-            )
-
-            data = response.json()
-
-            texto = data["results"][0]["text"]
-
-            Clock.schedule_once(
-                lambda dt: self.finalizar_resultado(texto)
-            )
-
-        except Exception as e:
-
-            Clock.schedule_once(
-                lambda dt: self.finalizar_resultado(
-                    f"[color=ff0000]ERRO:[/color]\n\n{str(e)}"
-                )
-            )
-
-    def finalizar_resultado(self, texto):
-
-        self.resultado.text = texto
-
-        self.botao.disabled = False
-
-
-class DirectorAIApp(App):
-
+class AppIsekai(App):
     def build(self):
-        return DirectorAI()
+        self.motor = MotorIsekai()
+        layout = BoxLayout(orientation='vertical', padding=20, spacing=10)
+        
+        # Campos de Entrada
+        self.input_chave = TextInput(hint_text="Cole sua Chave de Acesso (API Key)", multiline=False)
+        self.input_tema = TextInput(hint_text="Tema da história")
+        self.input_fala = TextInput(hint_text="Opção de Fala")
+        
+        self.lbl = Label(text="Bem-vindo, Viajante!")
+        btn = Button(text="Gerar História com Fala", on_press=self.iniciar)
+        
+        layout.add_widget(self.input_chave)
+        layout.add_widget(self.input_tema)
+        layout.add_widget(self.input_fala)
+        layout.add_widget(self.lbl)
+        layout.add_widget(btn)
+        return layout
 
+    def iniciar(self, instance):
+        if not self.input_chave.text:
+            self.lbl.text = "Erro: Chave obrigatória!"
+            return
+        
+        self.lbl.text = "Gerando seu Isekai..."
+        self.motor.gerar_historia(self.input_tema.text, self.input_fala.text, self.input_chave.text, self.atualizar)
+
+    def atualizar(self, texto):
+        self.lbl.text = texto
 
 if __name__ == "__main__":
-    DirectorAIApp().run()
-
+    AppIsekai().run()
