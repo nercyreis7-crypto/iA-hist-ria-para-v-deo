@@ -24,9 +24,11 @@ jobs:
           ANDROIDSDK_ACCEPT_LICENSE: "1"
           OPCAO_FALA: "ativada"
           CHAVE_ACESSO_IA: "obrigatoria"
+          VALICACAO_LIMPEZA: "ativa"
         run: |
           echo "OPCAO_FALA=$OPCAO_FALA" >> $GITHUB_ENV
           echo "CHAVE_ACESSO_IA=$CHAVE_ACESSO_IA" >> $GITHUB_ENV
+          echo "VALICACAO_LIMPEZA=$VALICACAO_LIMPEZA" >> $GITHUB_ENV
           buildozer android debug
 
       - name: Upload APK
@@ -34,3 +36,4 @@ jobs:
         with:
           name: DirectorAI-APK
           path: bin/*.apk
+
