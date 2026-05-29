@@ -6,8 +6,9 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,json,txt
 version = 1.0
 
-# Adicionei 'requests' aqui, que é o que seu main.py usa
-requirements = python3,kivy,requests,idna,certifi
+# REQUISITOS ATUALIZADOS:
+# Adicionamos 'google-generativeai' e 'urllib3' para que a IA funcione.
+requirements = python3,kivy,requests,idna,certifi,urllib3,google-generativeai
 
 orientation = portrait
 fullscreen = 0
@@ -25,6 +26,7 @@ warn_on_root = 0
 [buildozer]
 log_level = 2
 warn_on_root = 0
+
 
 
 
