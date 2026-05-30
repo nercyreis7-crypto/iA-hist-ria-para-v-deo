@@ -7,7 +7,6 @@ source.include_exts = py,png,jpg,kv,json,txt
 version = 1.0
 
 # REQUISITOS ATUALIZADOS:
-# Adicionamos 'google-generativeai' e 'urllib3' para que a IA funcione.
 requirements = python3,kivy,requests,idna,certifi,urllib3,google-generativeai
 
 orientation = portrait
