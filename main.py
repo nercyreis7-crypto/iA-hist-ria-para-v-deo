@@ -1,84 +1,112 @@
 import os
+import requests
+
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.textinput import TextInput
 from kivy.uix.button import Button
 from kivy.uix.label import Label
-from kivy.uix.scrollview import ScrollView
-import requests
-import json
+
+API_URL = "https://seu-servidor.com/generate-video"
 
 class DirectorIA(App):
-    def build(self):
-        self.layout = BoxLayout(orientation='vertical', padding=10, spacing=10)
-        
-        self.input_key = TextInput(hint_text="Sua API Key", multiline=False)
-        self.input_historia = TextInput(hint_text="História para vídeo...", multiline=True)
-        
-        self.btn_gerar = Button(text="Gerar e Salvar", on_press=self.processar)
-        self.btn_listar = Button(text="Ver Arquivos Salvos", on_press=self.listar_arquivos)
-        
-        self.label_status = Label(text="Aguardando...", size_hint_y=None)
-        self.label_status.bind(texture_size=self.label_status.setter('size'))
-        
-        self.scroll = ScrollView()
-        self.scroll.add_widget(self.label_status)
-        
-        self.layout.add_widget(self.input_key)
-        self.layout.add_widget(self.input_historia)
-        self.layout.add_widget(self.btn_gerar)
-        self.layout.add_widget(self.btn_listar)
-        self.layout.add_widget(self.scroll)
-        return self.layout
 
-    def salvar_roteiro(self, conteudo):
-        caminho = "/sdcard/Download/"
-        nome = "roteiro_video.json"
-        with open(os.path.join(caminho, nome), "w") as f:
-            f.write(conteudo)
-        return f"Salvo com sucesso em {caminho}{nome}"
+def build(self):
 
-    def processar(self, instance):
-        api_key = self.input_key.text.strip()
-        historia = self.input_historia.text.strip()
-        
-        if not api_key or not historia:
-            self.label_status.text = "Erro: API Key e História são obrigatórias."
+    layout = BoxLayout(
+        orientation="vertical",
+        padding=10,
+        spacing=10
+    )
+
+    self.api_key = TextInput(
+        hint_text="Chave de acesso",
+        multiline=False
+    )
+
+    self.story = TextInput(
+        hint_text="Digite sua história...",
+        multiline=True
+    )
+
+    self.status = Label(
+        text="Pronto"
+    )
+
+    btn = Button(
+        text="Gerar Vídeo"
+    )
+
+    btn.bind(on_press=self.generate_video)
+
+    layout.add_widget(self.api_key)
+    layout.add_widget(self.story)
+    layout.add_widget(btn)
+    layout.add_widget(self.status)
+
+    return layout
+
+def save_video(self, content):
+
+    path = "/sdcard/Download"
+
+    if not os.path.exists(path):
+        os.makedirs(path)
+
+    video_file = os.path.join(
+        path,
+        "video_final.mp4"
+    )
+
+    with open(video_file, "wb") as f:
+        f.write(content)
+
+    return video_file
+
+def generate_video(self, instance):
+
+    key = self.api_key.text.strip()
+    story = self.story.text.strip()
+
+    if not key:
+        self.status.text = "Informe a chave."
+        return
+
+    if not story:
+        self.status.text = "Digite uma história."
+        return
+
+    self.status.text = "Enviando para a nuvem..."
+
+    payload = {
+        "api_key": key,
+        "story": story
+    }
+
+    try:
+
+        response = requests.post(
+            API_URL,
+            json=payload,
+            timeout=300
+        )
+
+        if response.status_code != 200:
+            self.status.text = (
+                f"Erro {response.status_code}"
+            )
             return
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
-        
-        prompt = f"""
-        Transforme esta história em um roteiro de vídeo técnico em formato JSON.
-        História: {historia}
-        Responda APENAS com este formato JSON:
-        {{"title": "Título", "scenes": [{{"scene": 1, "dialog": "...", "action": "...", "broll": "...", "transition": "..."}}]}}
-        """
-        
-        payload = {"contents": [{"parts": [{"text": prompt}]}]}
-        
-        try:
-            self.label_status.text = "Gerando... aguarde."
-            resp = requests.post(url, json=payload, timeout=20)
-            data = resp.json()
-            
-            # Extrai o texto limpo da resposta
-            conteudo_json = data['candidates'][0]['content']['parts'][0]['text']
-            conteudo_limpo = conteudo_json.replace("```json", "").replace("```", "").strip()
-            
-            # Salva na pasta Download
-            msg = self.salvar_roteiro(conteudo_limpo)
-            self.label_status.text = msg
-        except Exception as e:
-            self.label_status.text = f"Erro na conexão: {str(e)}"
+        video_path = self.save_video(
+            response.content
+        )
 
-    def listar_arquivos(self, instance):
-        try:
-            arquivos = os.listdir("/sdcard/Download/")
-            roteiros = [f for f in arquivos if f.endswith(".json")]
-            self.label_status.text = "Arquivos encontrados:\n" + "\n".join(roteiros)
-        except Exception as e:
-            self.label_status.text = "Erro ao acessar pasta: verifique permissões."
+        self.status.text = (
+            f"Vídeo salvo:\n{video_path}"
+        )
 
-if __name__ == '__main__':
-    DirectorIA().run()
+    except Exception as e:
+        self.status.text = str(e)
+
+if name == "main":
+DirectorIA().run()
