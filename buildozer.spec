@@ -13,10 +13,10 @@ android.api = 33
 android.minapi = 21
 android.ndk = 25b
 android.archs = arm64-v8a
+# Adicione esta linha abaixo:
+android.build_tools_version = 34.0.0
 
 [buildozer]
 log_level = 2
-# Adicione estas duas linhas abaixo:
 warn_on_root = 0
 bin_dir = .
- 
