@@ -16,4 +16,7 @@ android.archs = arm64-v8a
 
 [buildozer]
 log_level = 2
-warn_on_root = 1
+# Adicione estas duas linhas abaixo:
+warn_on_root = 0
+bin_dir = .
+ 
