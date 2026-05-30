@@ -1,70 +1,54 @@
-import sys
-import threading
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.textinput import TextInput
 from kivy.uix.button import Button
 from kivy.uix.label import Label
-from kivy.uix.textinput import TextInput
-from kivy.clock import Clock
+from kivy.uix.scrollview import ScrollView
+import google.generativeai as genai
 
-try:
-    import google.generativeai as genai
-except ImportError:
-    genai = None
-
-class MotorIsekai:
-    def gerar_historia(self, tema, fala, api_key, callback):
-        def tarefa():
-            if not genai:
-                Clock.schedule_once(lambda dt: callback("Erro: Biblioteca da IA nao instalada!"))
-                return
-            
-            try:
-                historia_limpa = tema.replace("#", "")
-                fala_limpa = fala.replace("#", "")
-                
-                genai.configure(api_key=api_key)
-                model = genai.GenerativeModel('gemini-pro')
-                
-                prompt = f"Historia Isekai: {historia_limpa}. Com a fala: {fala_limpa}."
-                response = model.generate_content(prompt)
-                resultado = response.text
-            except Exception as e:
-                resultado = f"Erro de conexao: {str(e)}"
-            
-            Clock.schedule_once(lambda dt: callback(resultado))
-            
-        threading.Thread(target=tarefa, daemon=True).start()
-
-class AppIsekai(App):
+class DirectorIA(App):
     def build(self):
-        self.motor = MotorIsekai()
-        layout = BoxLayout(orientation='vertical', padding=20, spacing=10)
+        self.layout = BoxLayout(orientation='vertical', padding=10, spacing=10)
         
-        self.input_chave = TextInput(hint_text="Sua API Key (obrigatorio)", multiline=False)
-        self.input_tema = TextInput(hint_text="Tema da historia")
-        self.input_fala = TextInput(hint_text="O que o pessoal deve falar?")
+        # Campo da Chave API
+        self.input_chave = TextInput(hint_text="Cole sua chave API Gemini aqui", multiline=False)
+        # Campo do Tema
+        self.input_tema = TextInput(hint_text="Sobre o que é o vídeo?", multiline=True, size_hint_y=0.3)
+        # Botão de Gerar
+        self.btn_gerar = Button(text="Gerar História com Falas", on_press=self.gerar)
         
-        self.lbl = Label(text="Pressione para comecar", halign='center')
-        btn = Button(text="Gerar Historia", on_press=self.iniciar)
+        # Área de Scroll para a história (para não cortar o texto)
+        self.scroll = ScrollView()
+        self.label_resposta = Label(text="O roteiro aparecerá aqui...", size_hint_y=None)
+        self.label_resposta.bind(texture_size=self.label_resposta.setter('size'))
+        self.scroll.add_widget(self.label_resposta)
         
-        layout.add_widget(self.input_chave)
-        layout.add_widget(self.input_tema)
-        layout.add_widget(self.input_fala)
-        layout.add_widget(self.lbl)
-        layout.add_widget(btn)
-        return layout
+        self.layout.add_widget(self.input_chave)
+        self.layout.add_widget(self.input_tema)
+        self.layout.add_widget(self.btn_gerar)
+        self.layout.add_widget(self.scroll)
+        
+        return self.layout
 
-    def iniciar(self, instance):
-        if not self.input_chave.text:
-            self.lbl.text = "Erro: Coloque sua chave de acesso!"
+    def gerar(self, instance):
+        api_key = self.input_chave.text.strip()
+        tema = self.input_tema.text.strip()
+        
+        if not api_key:
+            self.label_resposta.text = "Erro: Coloque sua chave de acesso!"
             return
-        self.lbl.text = "Gerando..."
-        self.motor.gerar_historia(self.input_tema.text, self.input_fala.text, self.input_chave.text, self.atualizar)
+            
+        try:
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            
+            # Comando melhorado para incluir diálogos
+            prompt = f"Escreva um roteiro épico sobre: {tema}. Inclua diálogos alternados entre os personagens para dar emoção à cena."
+            
+            resposta = model.generate_content(prompt)
+            self.label_resposta.text = resposta.text
+        except Exception as e:
+            self.label_resposta.text = f"Erro na conexão: {str(e)}"
 
-    def atualizar(self, texto):
-        self.lbl.text = texto
-
-if __name__ == "__main__":
-    sys.setrecursionlimit(2000)
-    AppIsekai().run()
+if __name__ == '__main__':
+    DirectorIA().run()
