@@ -2,6 +2,7 @@
 title = DirectorIA
 package.name = directoria
 package.domain = org.test
+source.dir = .
 source.include_exts = py,png,jpg,kv,json
 version = 0.1
 requirements = python3,kivy,requests,idna,certifi,urllib3
