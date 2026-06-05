@@ -1,147 +1,250 @@
-import tkinter as tk
-from tkinter import ttk, messagebox
-import asyncio
-import threading
-import os
-import requests
-from gtts import gTTS
+from kivy.app import App
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.spinner import Spinner
+from kivy.uix.textinput import TextInput
+from kivy.uix.button import Button
+from kivy.uix.label import Label
+from kivy.uix.scrollview import ScrollView
+from kivy.network.urlrequest import UrlRequest
+from kivy.clock import Clock
+import json
 
-class DirectorIAApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("DirectorIA - História para Vídeo")
-        self.root.geometry("600x400")
-        self.root.resizable(False, False)
 
-        self._build_ui()
-
-    def _build_ui(self):
-        frame_principal = ttk.Frame(self.root, padding="20")
-        frame_principal.pack(fill=tk.BOTH, expand=True)
-
-        ttk.Label(frame_principal, text="Ideia / História:", font=("Arial", 11, "bold")).grid(row=0, column=0, sticky=tk.W, pady=(0, 5))
+class DirectorIAApp(App):
+    def build(self):
+        self.title = "DirectorIA"
+        self.tarefa_id = None
+        self.polling_event = None
+        self.processando = False
+        self.base_url = "https://seu-projeto.railway.app"
         
-        self.text_historia = tk.Text(frame_principal, height=6, width=60, font=("Arial", 10))
-        self.text_historia.grid(row=1, column=0, columnspan=2, pady=(0, 15))
-
-        ttk.Label(frame_principal, text="Motor de Processamento:", font=("Arial", 11, "bold")).grid(row=2, column=0, sticky=tk.W, pady=(0, 5))
+        layout = BoxLayout(orientation='vertical', padding=20, spacing=15)
         
-        self.modelo_selecionado = ttk.Combobox(frame_principal, state="readonly", width=57, font=("Arial", 10))
-        self.modelo_selecionado['values'] = ("Pipeline Completo (Roteiro + Voz + Vídeo)", "Apenas Roteiro (Qwen)", "Apenas Voz (TTS Nativo)")
-        self.modelo_selecionado.current(0)
-        self.modelo_selecionado.grid(row=3, column=0, columnspan=2, pady=(0, 15))
-
-        self.btn_processar = ttk.Button(frame_principal, text="Gerar Vídeo", command=self._iniciar_processamento)
-        self.btn_processar.grid(row=4, column=0, columnspan=2, pady=(0, 15))
-
-        self.label_status = ttk.Label(frame_principal, text="Aguardando início...", font=("Arial", 10, "italic"), foreground="gray")
-        self.label_status.grid(row=5, column=0, columnspan=2, sticky=tk.W)
-
-    def _atualizar_status(self, mensagem: str):
-        self.root.after(0, lambda: self.label_status.config(text=mensagem))
-
-    def _iniciar_processamento(self):
-        historia = self.text_historia.get("1.0", tk.END).strip()
-        if not historia:
-            messagebox.showwarning("Atenção", "Por favor, insira uma história ou ideia.")
+        titulo = Label(
+            text="DirectorIA - História para Vídeo",
+            font_size='20sp',
+            bold=True,
+            size_hint_y=0.1
+        )
+        layout.add_widget(titulo)
+        
+        label_historia = Label(text="Sua História:", size_hint_y=0.05, halign='left')
+        layout.add_widget(label_historia)
+        
+        self.input_historia = TextInput(
+            hint_text="Digite sua ideia ou história aqui...",
+            multiline=True,
+            size_hint_y=0.3
+        )
+        layout.add_widget(self.input_historia)
+        
+        label_modelo = Label(text="Motor de Processamento:", size_hint_y=0.05, halign='left')
+        layout.add_widget(label_modelo)
+        
+        self.spinner_modelo = Spinner(
+            text="Pipeline Completo",
+            values=("Pipeline Completo", "Apenas Roteiro", "Apenas Voz"),
+            size_hint_y=0.1,
+            font_size='16sp'
+        )
+        layout.add_widget(self.spinner_modelo)
+        
+        self.btn_processar = Button(
+            text="Gerar Vídeo",
+            size_hint_y=0.1,
+            font_size='18sp',
+            bold=True
+        )
+        self.btn_processar.bind(on_press=self.iniciar_processamento)
+        layout.add_widget(self.btn_processar)
+        
+        self.label_status = Label(
+            text="Aguardando início...",
+            size_hint_y=0.05,
+            color=(0.5, 0.5, 0.5, 1)
+        )
+        layout.add_widget(self.label_status)
+        
+        scroll = ScrollView(size_hint_y=0.3)
+        self.label_resultado = Label(
+            text="",
+            size_hint_y=None,
+            height=0,
+            halign='left',
+            valign='top',
+            text_size=(None, None)
+        )
+        self.label_resultado.bind(texture_size=self.label_resultado.setter('size'))
+        scroll.add_widget(self.label_resultado)
+        layout.add_widget(scroll)
+        
+        return layout
+    
+    def on_start(self):
+        Clock.schedule_once(self._update_text_size, 0.1)
+    
+    def _update_text_size(self, dt):
+        if hasattr(self, 'label_resultado') and self.root:
+            self.label_resultado.text_size = (self.root.width - 40, None)
+    
+    def on_stop(self):
+        self._cancelar_polling()
+    
+    def on_pause(self):
+        self._cancelar_polling()
+        return True
+    
+    def on_resume(self):
+        if self.processando and self.tarefa_id:
+            self.label_status.text = "Verificando status..."
+            self.consultar_status_uma_vez()
+    
+    def consultar_status_uma_vez(self):
+        """Consulta status uma única vez ao voltar do background"""
+        if not self.tarefa_id:
             return
-
-        modelo = self.modelo_selecionado.get()
-        self.btn_processar.config(state=tk.DISABLED)
         
-        threading.Thread(target=self._run_async_loop, args=(historia, modelo), daemon=True).start()
-
-    def _run_async_loop(self, historia: str, modelo: str):
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            loop.run_until_complete(self.processar_voz_e_video(historia, modelo))
-        except Exception as e:
-            self._atualizar_status(f"Erro crítico: {str(e)}")
-        finally:
-            loop.close()
-            self.root.after(0, lambda: self.btn_processar.config(state=tk.NORMAL))
-
-    async def processar_voz_e_video(self, historia: str, modelo: str):
-        try:
-            roteiro_final = ""
-            audio_path = "narracao_temp.mp3"
-            video_path = "video_final.mp4"
-
-            if "Roteiro" in modelo or "Completo" in modelo:
-                self._atualizar_status("Gerando roteiro com Qwen...")
-                roteiro_final = await self._chamar_qwen(historia)
-                if "Apenas Roteiro" in modelo:
-                    self._atualizar_status("Concluído! Roteiro gerado.")
-                    messagebox.showinfo("Sucesso", f"Roteiro:\n\n{roteiro_final}")
-                    return
-
-            if "Voz" in modelo or "Completo" in modelo:
-                self._atualizar_status("Convertendo áudio com TTS nativo...")
-                texto_para_falar = roteiro_final if roteiro_final else historia
-                tts = gTTS(text=texto_para_falar, lang='pt', slow=False)
-                tts.save(audio_path)
-
-                if "Apenas Voz" in modelo:
-                    self._atualizar_status("Concluído! Áudio gerado com sucesso.")
-                    messagebox.showinfo("Sucesso", f"Áudio salvo como: {os.path.abspath(audio_path)}")
-                    return
-
-            self._atualizar_status("Sincronizando vídeo e áudio...")
-            await self._integrar_audio_video(roteiro_final if roteiro_final else historia, audio_path, video_path)
-
-            self._atualizar_status("Processo finalizado com sucesso!")
-            messagebox.showinfo("Sucesso", f"Vídeo gerado com sucesso!\nSalvo em: {os.path.abspath(video_path)}")
-
-        except Exception as e:
-            self._atualizar_status(f"Falha no processo: {str(e)}")
-            messagebox.showerror("Erro", f"Ocorreu um erro durante o processamento:\n{str(e)}")
-
-    async def _chamar_qwen(self, historia: str) -> str:
-        try:
-            payload = {
-                "model": "qwen",
-                "prompt": f"Crie um roteiro curto, narrativo e envolvente baseado nesta história, pronto para narração: {historia}",
-                "stream": False
-            }
-            response = requests.post("http://localhost:11434/api/generate", json=payload, timeout=15)
-            if response.status_code == 200:
-                return response.json().get("response", "").strip()
-        except requests.exceptions.RequestException:
-            pass
+        url = f"{self.base_url}/status/{self.tarefa_id}"
         
-        return f"Narração: {historia}. O protagonista embarcou em uma jornada inesquecível, superando todos os obstáculos com coragem e determinação até alcançar seu objetivo final."
-
-    async def _integrar_audio_video(self, texto: str, audio_path: str, video_path: str):
-        try:
-            from moviepy import AudioFileClip, ColorClip
-            
-            audio = AudioFileClip(audio_path)
-            duracao = audio.duration
-            
-            video = ColorClip(size=(1280, 720), color=(40, 40, 40), duration=duracao)
-            video = video.with_audio(audio)
-            
-            video.write_videofile(
-                video_path, 
-                fps=24, 
-                codec="libx264", 
-                audio_codec="aac", 
-                logger=None
-            )
-            
-            audio.close()
-            video.close()
-            
-        except ImportError:
-            with open(video_path, "w", encoding="utf-8") as f:
-                f.write(f"ARQUIVO DE VÍDEO SIMULADO.\nPara renderização real, instale: pip install moviepy\n\nRoteiro usado:\n{texto}")
-        except Exception as e:
-            with open(video_path, "w", encoding="utf-8") as f:
-                f.write(f"Erro na renderização do vídeo: {str(e)}")
+        UrlRequest(
+            url,
+            on_success=self.on_status_recebido_resume,
+            on_failure=self.on_api_failure,
+            on_error=self.on_api_error,
+            timeout=15
+        )
+    
+    def on_status_recebido_resume(self, request, result):
+        """Handler específico para quando volta do background"""
+        if not isinstance(result, dict):
+            self._finalizar_processamento()
+            return
+        
+        status = result.get("status", "")
+        
+        if status in ["concluido", "erro"]:
+            self.on_status_recebido(request, result)
+        else:
+            self.label_status.text = result.get("mensagem", "Processando...")
+            self.polling_event = Clock.schedule_interval(self.consultar_status, 2)
+    
+    def _cancelar_polling(self):
+        """Cancela polling de forma segura"""
+        if self.polling_event:
+            self.polling_event.cancel()
+            self.polling_event = None
+    
+    def iniciar_processamento(self, instance):
+        if self.processando:
+            return
+        
+        historia = self.input_historia.text.strip()
+        if not historia:
+            self.label_status.text = "Por favor, insira uma história!"
+            return
+        
+        modelo = self.spinner_modelo.text
+        self.processando = True
+        self.btn_processar.disabled = True
+        self.label_status.text = "Enviando para API..."
+        self.label_resultado.text = ""
+        
+        self.chamar_api(historia, modelo)
+    
+    def chamar_api(self, historia, modelo):
+        url = f"{self.base_url}/processar"
+        
+        data = {
+            "historia": historia,
+            "modelo": modelo
+        }
+        
+        self.request = UrlRequest(
+            url,
+            req_body=json.dumps(data),
+            req_headers={"Content-Type": "application/json"},
+            on_success=self.on_tarefa_criada,
+            on_failure=self.on_api_failure,
+            on_error=self.on_api_error,
+            timeout=30
+        )
+    
+    def on_tarefa_criada(self, request, result):
+        if isinstance(result, dict) and "tarefa_id" in result:
+            self.tarefa_id = result["tarefa_id"]
+            self.label_status.text = "Processando..."
+            self.polling_event = Clock.schedule_interval(self.consultar_status, 2)
+        else:
+            self.label_status.text = "Erro: resposta inválida da API"
+            self._finalizar_processamento()
+    
+    def consultar_status(self, dt):
+        if not self.tarefa_id or not self.processando:
+            return
+        
+        url = f"{self.base_url}/status/{self.tarefa_id}"
+        
+        UrlRequest(
+            url,
+            on_success=self.on_status_recebido,
+            on_failure=self.on_api_failure,
+            on_error=self.on_api_error,
+            timeout=15
+        )
+    
+    def on_status_recebido(self, request, result):
+        if not isinstance(result, dict):
+            self.label_status.text = "Erro: resposta inválida do servidor"
+            self._finalizar_processamento()
+            return
+        
+        status = result.get("status", "")
+        mensagem = result.get("mensagem", "Processando...")
+        
+        self.label_status.text = mensagem
+        
+        if status == "concluido":
+            self._cancelar_polling()
+            self.exibir_resultado(result.get("resultado", {}))
+            self._finalizar_processamento()
+        
+        elif status == "erro":
+            self._cancelar_polling()
+            self.label_status.text = f"Erro: {mensagem}"
+            self._finalizar_processamento()
+    
+    def exibir_resultado(self, resultado):
+        texto = "✅ Concluído!\n\n"
+        
+        if "roteiro" in resultado:
+            texto += f"📝 ROTEIRO:\n{resultado['roteiro']}\n\n"
+        
+        if "roteiro_url" in resultado:
+            texto += f"📄 Download roteiro: {resultado['roteiro_url']}\n\n"
+        
+        if "audio_url" in resultado:
+            texto += f"🎵 Áudio: {resultado['audio_url']}\n\n"
+        
+        if "video_url" in resultado:
+            texto += f"🎥 Vídeo: {resultado['video_url']}\n\n"
+        
+        self.label_resultado.text = texto
+    
+    def _finalizar_processamento(self):
+        """Limpa estado após processamento"""
+        self._cancelar_polling()
+        self.processando = False
+        self.tarefa_id = None
+        self.btn_processar.disabled = False
+    
+    def on_api_error(self, request, error):
+        self.label_status.text = f"Erro na API: {error}"
+        self._finalizar_processamento()
+    
+    def on_api_failure(self, request, result):
+        self.label_status.text = "Falha na conexão com o servidor!"
+        self._finalizar_processamento()
 
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = DirectorIAApp(root)
-    root.mainloop()
+    DirectorIAApp().run()
