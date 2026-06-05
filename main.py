@@ -1,166 +1,250 @@
-import os
-import uuid
-import asyncio
-import shutil
-from typing import Dict
-from contextlib import asynccontextmanager
+from kivy.app import App
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.spinner import Spinner
+from kivy.uix.textinput import TextInput
+from kivy.uix.button import Button
+from kivy.uix.label import Label
+from kivy.uix.scrollview import ScrollView
+from kivy.network.urlrequest import UrlRequest
+from kivy.clock import Clock
+import json
 
-from fastapi import FastAPI, HTTPException
-from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from pydantic import BaseModel
 
-from services.roteiro_service import gerar_roteiro
-from services.voz_service import gerar_audio
-from services.video_service import gerar_video
+class DirectorIAApp(App):
+    def build(self):
+        self.title = "DirectorIA"
+        self.tarefa_id = None
+        self.polling_event = None
+        self.processando = False
+        self.base_url = "https://seu-projeto.railway.app"
+        
+        layout = BoxLayout(orientation='vertical', padding=20, spacing=15)
+        
+        titulo = Label(
+            text="DirectorIA - História para Vídeo",
+            font_size='20sp',
+            bold=True,
+            size_hint_y=0.1
+        )
+        layout.add_widget(titulo)
+        
+        label_historia = Label(text="Sua História:", size_hint_y=0.05, halign='left')
+        layout.add_widget(label_historia)
+        
+        self.input_historia = TextInput(
+            hint_text="Digite sua ideia ou história aqui...",
+            multiline=True,
+            size_hint_y=0.3
+        )
+        layout.add_widget(self.input_historia)
+        
+        label_modelo = Label(text="Motor de Processamento:", size_hint_y=0.05, halign='left')
+        layout.add_widget(label_modelo)
+        
+        self.spinner_modelo = Spinner(
+            text="Pipeline Completo",
+            values=("Pipeline Completo", "Apenas Roteiro", "Apenas Voz"),
+            size_hint_y=0.1,
+            font_size='16sp'
+        )
+        layout.add_widget(self.spinner_modelo)
+        
+        self.btn_processar = Button(
+            text="Gerar Vídeo",
+            size_hint_y=0.1,
+            font_size='18sp',
+            bold=True
+        )
+        self.btn_processar.bind(on_press=self.iniciar_processamento)
+        layout.add_widget(self.btn_processar)
+        
+        self.label_status = Label(
+            text="Aguardando início...",
+            size_hint_y=0.05,
+            color=(0.5, 0.5, 0.5, 1)
+        )
+        layout.add_widget(self.label_status)
+        
+        scroll = ScrollView(size_hint_y=0.3)
+        self.label_resultado = Label(
+            text="",
+            size_hint_y=None,
+            height=0,
+            halign='left',
+            valign='top',
+            text_size=(None, None)
+        )
+        self.label_resultado.bind(texture_size=self.label_resultado.setter('size'))
+        scroll.add_widget(self.label_resultado)
+        layout.add_widget(scroll)
+        
+        return layout
+    
+    def on_start(self):
+        Clock.schedule_once(self._update_text_size, 0.1)
+    
+    def _update_text_size(self, dt):
+        if hasattr(self, 'label_resultado') and self.root:
+            self.label_resultado.text_size = (self.root.width - 40, None)
+    
+    def on_stop(self):
+        self._cancelar_polling()
+    
+    def on_pause(self):
+        self._cancelar_polling()
+        return True
+    
+    def on_resume(self):
+        if self.processando and self.tarefa_id:
+            self.label_status.text = "Verificando status..."
+            self.consultar_status_uma_vez()
+    
+    def consultar_status_uma_vez(self):
+        """Consulta status uma única vez ao voltar do background"""
+        if not self.tarefa_id:
+            return
+        
+        url = f"{self.base_url}/status/{self.tarefa_id}"
+        
+        UrlRequest(
+            url,
+            on_success=self.on_status_recebido_resume,
+            on_failure=self.on_api_failure,
+            on_error=self.on_api_error,
+            timeout=15
+        )
+    
+    def on_status_recebido_resume(self, request, result):
+        """Handler específico para quando volta do background"""
+        if not isinstance(result, dict):
+            self._finalizar_processamento()
+            return
+        
+        status = result.get("status", "")
+        
+        if status in ["concluido", "erro"]:
+            self.on_status_recebido(request, result)
+        else:
+            self.label_status.text = result.get("mensagem", "Processando...")
+            self.polling_event = Clock.schedule_interval(self.consultar_status, 2)
+    
+    def _cancelar_polling(self):
+        """Cancela polling de forma segura"""
+        if self.polling_event:
+            self.polling_event.cancel()
+            self.polling_event = None
+    
+    def iniciar_processamento(self, instance):
+        if self.processando:
+            return
+        
+        historia = self.input_historia.text.strip()
+        if not historia:
+            self.label_status.text = "Por favor, insira uma história!"
+            return
+        
+        modelo = self.spinner_modelo.text
+        self.processando = True
+        self.btn_processar.disabled = True
+        self.label_status.text = "Enviando para API..."
+        self.label_resultado.text = ""
+        
+        self.chamar_api(historia, modelo)
+    
+    def chamar_api(self, historia, modelo):
+        url = f"{self.base_url}/processar"
+        
+        data = {
+            "historia": historia,
+            "modelo": modelo
+        }
+        
+        self.request = UrlRequest(
+            url,
+            req_body=json.dumps(data),
+            req_headers={"Content-Type": "application/json"},
+            on_success=self.on_tarefa_criada,
+            on_failure=self.on_api_failure,
+            on_error=self.on_api_error,
+            timeout=30
+        )
+    
+    def on_tarefa_criada(self, request, result):
+        if isinstance(result, dict) and "tarefa_id" in result:
+            self.tarefa_id = result["tarefa_id"]
+            self.label_status.text = "Processando..."
+            self.polling_event = Clock.schedule_interval(self.consultar_status, 2)
+        else:
+            self.label_status.text = "Erro: resposta inválida da API"
+            self._finalizar_processamento()
+    
+    def consultar_status(self, dt):
+        if not self.tarefa_id or not self.processando:
+            return
+        
+        url = f"{self.base_url}/status/{self.tarefa_id}"
+        
+        UrlRequest(
+            url,
+            on_success=self.on_status_recebido,
+            on_failure=self.on_api_failure,
+            on_error=self.on_api_error,
+            timeout=15
+        )
+    
+    def on_status_recebido(self, request, result):
+        if not isinstance(result, dict):
+            self.label_status.text = "Erro: resposta inválida do servidor"
+            self._finalizar_processamento()
+            return
+        
+        status = result.get("status", "")
+        mensagem = result.get("mensagem", "Processando...")
+        
+        self.label_status.text = mensagem
+        
+        if status == "concluido":
+            self._cancelar_polling()
+            self.exibir_resultado(result.get("resultado", {}))
+            self._finalizar_processamento()
+        
+        elif status == "erro":
+            self._cancelar_polling()
+            self.label_status.text = f"Erro: {mensagem}"
+            self._finalizar_processamento()
+    
+    def exibir_resultado(self, resultado):
+        texto = "✅ Concluído!\n\n"
+        
+        if "roteiro" in resultado:
+            texto += f"📝 ROTEIRO:\n{resultado['roteiro']}\n\n"
+        
+        if "roteiro_url" in resultado:
+            texto += f"📄 Download roteiro: {resultado['roteiro_url']}\n\n"
+        
+        if "audio_url" in resultado:
+            texto += f"🎵 Áudio: {resultado['audio_url']}\n\n"
+        
+        if "video_url" in resultado:
+            texto += f"🎥 Vídeo: {resultado['video_url']}\n\n"
+        
+        self.label_resultado.text = texto
+    
+    def _finalizar_processamento(self):
+        """Limpa estado após processamento"""
+        self._cancelar_polling()
+        self.processando = False
+        self.tarefa_id = None
+        self.btn_processar.disabled = False
+    
+    def on_api_error(self, request, error):
+        self.label_status.text = f"Erro na API: {error}"
+        self._finalizar_processamento()
+    
+    def on_api_failure(self, request, result):
+        self.label_status.text = "Falha na conexão com o servidor!"
+        self._finalizar_processamento()
 
-tarefas: Dict[str, dict] = {}
-
-PASTA_STATIC = "static"
-os.makedirs(PASTA_STATIC, exist_ok=True)
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    app.mount("/files", StaticFiles(directory=PASTA_STATIC), name="files")
-    yield
-
-app = FastAPI(
-    title="DirectorIA API",
-    description="API para conversão de História em Vídeo",
-    version="1.0.0",
-    lifespan=lifespan
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-class RequisicaoProcessamento(BaseModel):
-    historia: str
-    modelo: str
-
-class RespostaTarefa(BaseModel):
-    tarefa_id: str
-    status: str
-    mensagem: str
-
-@app.post("/processar", response_model=RespostaTarefa)
-async def processar_historia(requisicao: RequisicaoProcessamento):
-    if not requisicao.historia.strip():
-        raise HTTPException(status_code=400, detail="História não pode ser vazia")
-
-    tarefa_id = str(uuid.uuid4())
-    pasta_tarefa = os.path.join(PASTA_STATIC, tarefa_id)
-    os.makedirs(pasta_tarefa, exist_ok=True)
-
-    tarefas[tarefa_id] = {
-        "status": "iniciando",
-        "mensagem": "Tarefa criada, aguardando processamento...",
-        "pasta": pasta_tarefa,
-        "resultado": {}
-    }
-
-    asyncio.create_task(executar_pipeline(tarefa_id, requisicao))
-
-    return RespostaTarefa(
-        tarefa_id=tarefa_id,
-        status="iniciando",
-        mensagem="Processamento iniciado. Consulte /status/{tarefa_id}"
-    )
-
-@app.get("/status/{tarefa_id}")
-async def consultar_status(tarefa_id: str):
-    if tarefa_id not in tarefas:
-        raise HTTPException(status_code=404, detail="Tarefa não encontrada")
-
-    tarefa = tarefas[tarefa_id]
-    resposta = {
-        "status": tarefa["status"],
-        "mensagem": tarefa["mensagem"],
-        "resultado": tarefa["resultado"]
-    }
-
-    if tarefa["status"] in ["concluido", "erro"]:
-        asyncio.create_task(limpar_tarefa(tarefa_id, delay=300))
-
-    return resposta
-
-async def executar_pipeline(tarefa_id: str, requisicao: RequisicaoProcessamento):
-    tarefa = tarefas[tarefa_id]
-    pasta = tarefa["pasta"]
-    modelo = requisicao.modelo
-
-    try:
-        roteiro_texto = ""
-        audio_path = None
-
-        if "Roteiro" in modelo or "Completo" in modelo:
-            tarefa["status"] = "gerando_roteiro"
-            tarefa["mensagem"] = "Gerando roteiro com IA..."
-            await asyncio.sleep(0.1)
-
-            roteiro_texto = await gerar_roteiro(requisicao.historia)
-            roteiro_path = os.path.join(pasta, "roteiro.txt")
-            with open(roteiro_path, "w", encoding="utf-8") as f:
-                f.write(roteiro_texto)
-
-            tarefa["resultado"]["roteiro"] = roteiro_texto
-            tarefa["resultado"]["roteiro_url"] = f"/files/{tarefa_id}/roteiro.txt"
-
-            if "Apenas Roteiro" in modelo:
-                tarefa["status"] = "concluido"
-                tarefa["mensagem"] = "Roteiro gerado com sucesso!"
-                return
-
-        if "Voz" in modelo or "Completo" in modelo:
-            tarefa["status"] = "gerando_voz"
-            tarefa["mensagem"] = "Convertendo texto em áudio..."
-            await asyncio.sleep(0.1)
-
-            texto_para_narrar = roteiro_texto if roteiro_texto else requisicao.historia
-            audio_path = os.path.join(pasta, "narracao.mp3")
-            await gerar_audio(texto_para_narrar, audio_path)
-
-            tarefa["resultado"]["audio_url"] = f"/files/{tarefa_id}/narracao.mp3"
-
-            if "Apenas Voz" in modelo:
-                tarefa["status"] = "concluido"
-                tarefa["mensagem"] = "Áudio gerado com sucesso!"
-                return
-
-        tarefa["status"] = "gerando_video"
-        tarefa["mensagem"] = "Sincronizando vídeo e áudio..."
-        await asyncio.sleep(0.1)
-
-        texto_visual = roteiro_texto if roteiro_texto else requisicao.historia
-        video_path = os.path.join(pasta, "video_final.mp4")
-        await gerar_video(texto_visual, audio_path, video_path)
-
-        tarefa["resultado"]["video_url"] = f"/files/{tarefa_id}/video_final.mp4"
-        tarefa["status"] = "concluido"
-        tarefa["mensagem"] = "Vídeo gerado com sucesso!"
-
-    except Exception as e:
-        tarefa["status"] = "erro"
-        tarefa["mensagem"] = f"Erro no processamento: {str(e)}"
-
-async def limpar_tarefa(tarefa_id: str, delay: int = 300):
-    await asyncio.sleep(delay)
-    if tarefa_id in tarefas:
-        pasta = tarefas[tarefa_id].get("pasta")
-        if pasta and os.path.exists(pasta):
-            shutil.rmtree(pasta, ignore_errors=True)
-        del tarefas[tarefa_id]
-
-@app.get("/health")
-async def health_check():
-    return {"status": "online", "servico": "DirectorIA API"}
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    DirectorIAApp().run()
