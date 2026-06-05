@@ -143,4 +143,4 @@ def _fallback_roteiro(historia: str) -> str:
         "Cada passo revela uma nova descoberta, cada desafio fortalece o espírito. "
         "No fim, a verdadeira vitória não está no destino, mas na transformação "
         "que aconteceu ao longo do caminho."
-  )
+    )
