@@ -1,5 +1,6 @@
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.gridlayout import GridLayout
 from kivy.uix.spinner import Spinner
 from kivy.uix.textinput import TextInput
 from kivy.uix.button import Button
@@ -7,7 +8,6 @@ from kivy.uix.label import Label
 from kivy.uix.scrollview import ScrollView
 from kivy.network.urlrequest import UrlRequest
 from kivy.clock import Clock
-from kivy.properties import StringProperty
 import json
 
 
@@ -17,67 +17,148 @@ class DirectorIAApp(App):
         self.tarefa_id = None
         self.polling_event = None
         self.processando = False
+        self.servidor_testando = False
         
-        # URL padrão (pode ser sobrescrita pelo usuário)
-        self.default_url = "https://seu-projeto.railway.app"
+        # 🔥 NOVO: Lista de servidores pré-configurados
+        self.servidores = {
+            "🌟 Servidor Oficial (Recomendado)": "https://seu-projeto.railway.app",
+            "⚡ Servidor Alternativo": "https://seu-projeto-backup.railway.app",
+            "✏️ Personalizado (Digitar URL)": ""
+        }
         
-        # Carrega URL salva ou usa padrão
-        self.base_url = self.get_url_salva()
+        # Carrega configurações salvas
+        self.servidor_selecionado = self.get_servidor_salvo()
+        self.base_url = self.servidores.get(self.servidor_selecionado, "")
         
-        layout = BoxLayout(orientation='vertical', padding=20, spacing=15)
+        # Se era personalizado, carrega URL customizada
+        if self.servidor_selecionado == "✏️ Personalizado (Digitar URL)":
+            self.base_url = self.get_url_personalizada_salva()
+        
+        layout = BoxLayout(orientation='vertical', padding=20, spacing=8)
         
         # Título
         titulo = Label(
-            text="DirectorIA - História para Vídeo",
-            font_size='20sp',
+            text="🎬 DirectorIA",
+            font_size='22sp',
             bold=True,
-            size_hint_y=0.08
+            size_hint_y=0.06,
+            color=(0.3, 0.6, 1, 1)
         )
         layout.add_widget(titulo)
         
-        # Campo de URL do Backend
-        label_url = Label(text="URL do Backend:", size_hint_y=0.04, halign='left')
-        layout.add_widget(label_url)
+        # ============================================
+        # 🔥 SEÇÃO DE SERVIDOR (NOVA!)
+        # ============================================
+        label_servidor = Label(
+            text="🖥️ Escolha o Servidor:",
+            size_hint_y=0.03,
+            halign='left',
+            bold=True
+        )
+        layout.add_widget(label_servidor)
         
-        self.input_url = TextInput(
-            text=self.base_url,
-            hint_text="https://seu-backend.railway.app",
-            multiline=False,
-            size_hint_y=0.08,
+        # Spinner de servidores
+        self.spinner_servidor = Spinner(
+            text=self.servidor_selecionado,
+            values=list(self.servidores.keys()),
+            size_hint_y=0.07,
             font_size='14sp'
         )
-        self.input_url.bind(text=self.salvar_url)
-        layout.add_widget(self.input_url)
+        self.spinner_servidor.bind(text=self.mudar_servidor)
+        layout.add_widget(self.spinner_servidor)
         
-        # Campo de história
-        label_historia = Label(text="Sua História:", size_hint_y=0.04, halign='left')
-        layout.add_widget(label_historia)
+        # Campo de URL personalizada (aparece só quando "Personalizado" está selecionado)
+        self.box_url_personalizada = BoxLayout(orientation='vertical', size_hint_y=0.08, spacing=5)
         
-        self.input_historia = TextInput(
+        self.input_url = TextInput(
+            text=self.base_url if self.servidor_selecionado == "✏️ Personalizado (Digitar URL)" else "",
+            hint_text="https://seu-servidor-personalizado.com",
+            multiline=False,
+            size_hint_y=1,
+            font_size='13sp'
+        )
+        self.input_url.bind(text=self.salvar_url_personalizada)
+        self.box_url_personalizada.add_widget(self.input_url)
+        
+        # Só mostra se já estava em modo personalizado
+        if self.servidor_selecionado != "✏️ Personalizado (Digitar URL)":
+            self.box_url_personalizada.opacity = 0
+            self.box_url_personalizada.size_hint_y = 0
+        
+        layout.add_widget(self.box_url_personalizada)
+        
+        # Botão de Testar Conexão + Status
+        box_teste = BoxLayout(size_hint_y=0.06, spacing=10)
+        
+        self.btn_testar = Button(
+            text="🔍 Testar Conexão",
+            size_hint_x=0.6,
+            font_size='14sp',
+            bold=True
+        )
+        self.btn_testar.bind(on_press=self.testar_conexao)
+        box_teste.add_widget(self.btn_testar)
+        
+        self.label_status_servidor = Label(
+            text="⚪ Não testado",
+            size_hint_x=0.4,
+            font_size='13sp',
+            color=(0.7, 0.7, 0.7, 1)
+        )
+        box_teste.add_widget(self.label_status_servidor)
+        
+        layout.add_widget(box_teste)
+        
+        # Linha divisória visual
+        divisoria = Label(text="", size_hint_y=0.01, color=(0.3, 0.3, 0.3, 1))
+        layout.add_widget(divisoria)
+        
+        # ============================================
+        # SEÇÃO DE CONTEÚDO
+        # ============================================
+        # Seletor de Modo de Entrada
+        label_modo = Label(text="🎯 Modo de Entrada:", size_hint_y=0.03, halign='left')
+        layout.add_widget(label_modo)
+        
+        self.spinner_modo = Spinner(
+            text="📝 Digitar Texto",
+            values=("📝 Digitar Texto", "🔗 Colar Link"),
+            size_hint_y=0.06,
+            font_size='14sp'
+        )
+        self.spinner_modo.bind(text=self.mudar_modo)
+        layout.add_widget(self.spinner_modo)
+        
+        # Campo de entrada
+        self.label_entrada = Label(text="📝 Sua História:", size_hint_y=0.03, halign='left')
+        layout.add_widget(self.label_entrada)
+        
+        self.input_entrada = TextInput(
             hint_text="Digite sua ideia ou história aqui...",
             multiline=True,
-            size_hint_y=0.25
+            size_hint_y=0.18
         )
-        layout.add_widget(self.input_historia)
+        layout.add_widget(self.input_entrada)
         
         # Seletor de Modelo
-        label_modelo = Label(text="Motor de Processamento:", size_hint_y=0.04, halign='left')
+        label_modelo = Label(text="⚙️ Motor de Processamento:", size_hint_y=0.03, halign='left')
         layout.add_widget(label_modelo)
         
         self.spinner_modelo = Spinner(
             text="Pipeline Completo",
             values=("Pipeline Completo", "Apenas Roteiro", "Apenas Voz"),
-            size_hint_y=0.08,
-            font_size='16sp'
+            size_hint_y=0.06,
+            font_size='14sp'
         )
         layout.add_widget(self.spinner_modelo)
         
         # Botão de processar
         self.btn_processar = Button(
-            text="Gerar Vídeo",
-            size_hint_y=0.08,
-            font_size='18sp',
-            bold=True
+            text="🎬 Gerar Vídeo",
+            size_hint_y=0.07,
+            font_size='16sp',
+            bold=True,
+            background_color=(0.2, 0.6, 1, 1)
         )
         self.btn_processar.bind(on_press=self.iniciar_processamento)
         layout.add_widget(self.btn_processar)
@@ -85,13 +166,13 @@ class DirectorIAApp(App):
         # Status
         self.label_status = Label(
             text="Aguardando início...",
-            size_hint_y=0.04,
+            size_hint_y=0.03,
             color=(0.5, 0.5, 0.5, 1)
         )
         layout.add_widget(self.label_status)
         
         # Área de resultado
-        scroll = ScrollView(size_hint_y=0.31)
+        scroll = ScrollView(size_hint_y=0.25)
         self.label_resultado = Label(
             text="",
             size_hint_y=None,
@@ -106,29 +187,156 @@ class DirectorIAApp(App):
         
         return layout
     
-    def get_url_salva(self):
-        """Carrega URL salva nas preferências ou retorna padrão"""
+    # ============================================
+    # 🔥 MÉTODOS DE SERVIDOR (NOVOS!)
+    # ============================================
+    
+    def mudar_servidor(self, spinner, texto):
+        """Muda o servidor selecionado"""
+        self.servidor_selecionado = texto
+        self.salvar_servidor(texto)
+        
+        if texto == "✏️ Personalizado (Digitar URL)":
+            # Mostra campo de URL personalizada
+            self.box_url_personalizada.opacity = 1
+            self.box_url_personalizada.size_hint_y = 0.08
+            self.base_url = self.get_url_personalizada_salva()
+            self.input_url.text = self.base_url
+        else:
+            # Esconde campo de URL personalizada
+            self.box_url_personalizada.opacity = 0
+            self.box_url_personalizada.size_hint_y = 0
+            self.base_url = self.servidores.get(texto, "")
+        
+        # Reseta status do servidor
+        self.label_status_servidor.text = "⚪ Não testado"
+        self.label_status_servidor.color = (0.7, 0.7, 0.7, 1)
+    
+    def testar_conexao(self, instance):
+        """Testa se o servidor está online"""
+        if self.servidor_testando:
+            return
+        
+        # Atualiza URL antes de testar
+        if self.servidor_selecionado == "✏️ Personalizado (Digitar URL)":
+            self.base_url = self.input_url.text.strip()
+            if self.base_url.endswith('/'):
+                self.base_url = self.base_url[:-1]
+        
+        if not self.base_url:
+            self.label_status_servidor.text = "❌ Sem URL"
+            self.label_status_servidor.color = (1, 0.3, 0.3, 1)
+            return
+        
+        self.servidor_testando = True
+        self.btn_testar.disabled = True
+        self.label_status_servidor.text = "🔄 Testando..."
+        self.label_status_servidor.color = (1, 1, 0.3, 1)
+        
+        # Remove barra no final
+        url_teste = self.base_url.rstrip('/')
+        
+        # Tenta endpoint /health
+        UrlRequest(
+            f"{url_teste}/health",
+            on_success=self._teste_sucesso,
+            on_failure=self._teste_falha,
+            on_error=self._teste_erro,
+            timeout=10
+        )
+    
+    def _teste_sucesso(self, request, result):
+        """Servidor respondeu com sucesso"""
+        self.servidor_testando = False
+        self.btn_testar.disabled = False
+        
+        if isinstance(result, dict) and result.get("status") == "online":
+            self.label_status_servidor.text = "🟢 Online"
+            self.label_status_servidor.color = (0.3, 1, 0.3, 1)
+        else:
+            self.label_status_servidor.text = "🟡 Respondeu (estranho)"
+            self.label_status_servidor.color = (1, 1, 0.3, 1)
+    
+    def _teste_falha(self, request, result):
+        """Servidor respondeu com erro HTTP"""
+        self.servidor_testando = False
+        self.btn_testar.disabled = False
+        self.label_status_servidor.text = "🔴 Offline"
+        self.label_status_servidor.color = (1, 0.3, 0.3, 1)
+    
+    def _teste_erro(self, request, error):
+        """Erro de conexão"""
+        self.servidor_testando = False
+        self.btn_testar.disabled = False
+        self.label_status_servidor.text = "🔴 Sem conexão"
+        self.label_status_servidor.color = (1, 0.3, 0.3, 1)
+    
+    def salvar_servidor(self, nome_servidor):
+        """Salva o servidor selecionado"""
         from kivy.config import Config
         try:
-            url = Config.get('directorIA', 'backend_url')
-            if url and url != '':
-                return url
+            if not Config.has_section('directorIA'):
+                Config.add_section('directorIA')
+            Config.set('directorIA', 'servidor_selecionado', nome_servidor)
+            Config.write()
+        except Exception as e:
+            print(f"[AVISO] Falha ao salvar servidor: {e}")
+    
+    def get_servidor_salvo(self):
+        """Carrega o servidor salvo"""
+        from kivy.config import Config
+        try:
+            servidor = Config.get('directorIA', 'servidor_selecionado')
+            if servidor and servidor in self.servidores:
+                return servidor
         except:
             pass
-        return self.default_url
+        return "🌟 Servidor Oficial (Recomendado)"
     
-    def salvar_url(self, instance, value):
-        """Salva URL nas preferências quando o usuário digita"""
+    def salvar_url_personalizada(self, instance, value):
+        """Salva URL personalizada"""
         if value and value.strip():
             from kivy.config import Config
             try:
                 if not Config.has_section('directorIA'):
                     Config.add_section('directorIA')
-                Config.set('directorIA', 'backend_url', value.strip())
+                Config.set('directorIA', 'url_personalizada', value.strip())
                 Config.write()
                 self.base_url = value.strip()
             except Exception as e:
                 print(f"[AVISO] Falha ao salvar URL: {e}")
+    
+    def get_url_personalizada_salva(self):
+        """Carrega URL personalizada salva"""
+        from kivy.config import Config
+        try:
+            url = Config.get('directorIA', 'url_personalizada')
+            if url and url != '':
+                return url
+        except:
+            pass
+        return ""
+    
+    # ============================================
+    # MÉTODOS DE MODO DE ENTRADA
+    # ============================================
+    
+    def mudar_modo(self, spinner, texto):
+        """Muda o campo de entrada conforme o modo selecionado"""
+        if "Link" in texto:
+            self.label_entrada.text = "🔗 Cole o Link do Site:"
+            self.input_entrada.hint_text = "https://exemplo.com/video-ou-audio"
+            self.input_entrada.text = ""
+            self.input_entrada.multiline = False
+        else:
+            self.label_entrada.text = "📝 Sua História:"
+            self.input_entrada.hint_text = "Digite sua ideia ou história aqui..."
+            self.input_entrada.text = ""
+            self.input_entrada.multiline = True
+    
+    # ============================================
+    # MÉTODOS DE LIFECYCLE
+    # ============================================
     
     def on_start(self):
         Clock.schedule_once(self._update_text_size, 0.1)
@@ -184,40 +392,64 @@ class DirectorIAApp(App):
             self.polling_event.cancel()
             self.polling_event = None
     
+    # ============================================
+    # MÉTODOS DE PROCESSAMENTO
+    # ============================================
+    
     def iniciar_processamento(self, instance):
         if self.processando:
             return
         
-        # Atualiza URL do campo de texto
-        self.base_url = self.input_url.text.strip()
+        # Atualiza URL
+        if self.servidor_selecionado == "✏️ Personalizado (Digitar URL)":
+            self.base_url = self.input_url.text.strip()
+        else:
+            self.base_url = self.servidores.get(self.servidor_selecionado, "")
         
         if not self.base_url:
-            self.label_status.text = "Por favor, configure a URL do backend!"
+            self.label_status.text = "Por favor, configure a URL do servidor!"
             return
         
-        # Remove barra no final se existir
+        # Remove barra no final
         if self.base_url.endswith('/'):
             self.base_url = self.base_url[:-1]
-            self.input_url.text = self.base_url
         
-        historia = self.input_historia.text.strip()
-        if not historia:
-            self.label_status.text = "Por favor, insira uma história!"
+        # Pega o conteúdo
+        entrada = self.input_entrada.text.strip()
+        if not entrada:
+            if "Link" in self.spinner_modo.text:
+                self.label_status.text = "Por favor, cole um link!"
+            else:
+                self.label_status.text = "Por favor, insira uma história!"
             return
         
         modelo = self.spinner_modelo.text
+        modo = self.spinner_modo.text
+        
+        # Define tipo de conteúdo
+        if "Link" in modo:
+            if not entrada.startswith(('http://', 'https://')):
+                self.label_status.text = "Link inválido! Deve começar com http:// ou https://"
+                return
+            tipo_conteudo = "link"
+            self.label_status.text = "Enviando link para API..."
+        else:
+            tipo_conteudo = "texto"
+            self.label_status.text = "Enviando texto para API..."
+        
         self.processando = True
         self.btn_processar.disabled = True
-        self.label_status.text = "Enviando para API..."
         self.label_resultado.text = ""
         
-        self.chamar_api(historia, modelo)
+        self.chamar_api(entrada, modelo, tipo_conteudo)
     
-    def chamar_api(self, historia, modelo):
+    def chamar_api(self, conteudo, modelo, tipo_conteudo):
+        """Chama a API enviando o conteúdo e o tipo"""
         url = f"{self.base_url}/processar"
         
         data = {
-            "historia": historia,
+            "conteudo": conteudo,
+            "tipo": tipo_conteudo,
             "modelo": modelo
         }
         
@@ -309,4 +541,7 @@ class DirectorIAApp(App):
 
 
 if __name__ == "__main__":
-    DirectorIAApp().run()            
+    DirectorIAApp().run()
+        
+        
+
