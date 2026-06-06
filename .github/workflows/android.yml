@@ -34,18 +34,20 @@ jobs:
 
     - name: Accept Android SDK Licenses
       run: |
-        mkdir -p $ANDROID_HOME/licenses
-        echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee" > $ANDROID_HOME/licenses/android-sdk-license
-        echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > $ANDROID_HOME/licenses/android-sdk-preview-license
-        echo -e "\nd975f751698a77b662f1254ddbeed3901e976f5a" > $ANDROID_HOME/licenses/intel-android-extra-license
-      env:
-        ANDROID_HOME: /usr/lib/android-sdk
+        # Usa ANDROID_SDK_ROOT que já existe e tem permissão no runner
+        SDK_ROOT="${ANDROID_SDK_ROOT:-$HOME/android-sdk}"
+        mkdir -p "$SDK_ROOT/licenses"
+        echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee" > "$SDK_ROOT/licenses/android-sdk-license"
+        echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > "$SDK_ROOT/licenses/android-sdk-preview-license"
+        echo -e "\nd975f751698a77b662f1254ddbeed3901e976f5a" > "$SDK_ROOT/licenses/intel-android-extra-license"
+        echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> $GITHUB_ENV
 
     - name: Build APK
       run: |
         buildozer android debug
       env:
-        ANDROID_HOME: /usr/lib/android-sdk
+        ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
+        ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
