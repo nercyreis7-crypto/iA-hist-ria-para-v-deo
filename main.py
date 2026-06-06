@@ -7,6 +7,7 @@ from kivy.uix.label import Label
 from kivy.uix.scrollview import ScrollView
 from kivy.network.urlrequest import UrlRequest
 from kivy.clock import Clock
+from kivy.properties import StringProperty
 import json
 
 
@@ -16,56 +17,81 @@ class DirectorIAApp(App):
         self.tarefa_id = None
         self.polling_event = None
         self.processando = False
-        self.base_url = "https://seu-projeto.railway.app"
+        
+        # URL padrão (pode ser sobrescrita pelo usuário)
+        self.default_url = "https://seu-projeto.railway.app"
+        
+        # Carrega URL salva ou usa padrão
+        self.base_url = self.get_url_salva()
         
         layout = BoxLayout(orientation='vertical', padding=20, spacing=15)
         
+        # Título
         titulo = Label(
             text="DirectorIA - História para Vídeo",
             font_size='20sp',
             bold=True,
-            size_hint_y=0.1
+            size_hint_y=0.08
         )
         layout.add_widget(titulo)
         
-        label_historia = Label(text="Sua História:", size_hint_y=0.05, halign='left')
+        # Campo de URL do Backend
+        label_url = Label(text="URL do Backend:", size_hint_y=0.04, halign='left')
+        layout.add_widget(label_url)
+        
+        self.input_url = TextInput(
+            text=self.base_url,
+            hint_text="https://seu-backend.railway.app",
+            multiline=False,
+            size_hint_y=0.08,
+            font_size='14sp'
+        )
+        self.input_url.bind(text=self.salvar_url)
+        layout.add_widget(self.input_url)
+        
+        # Campo de história
+        label_historia = Label(text="Sua História:", size_hint_y=0.04, halign='left')
         layout.add_widget(label_historia)
         
         self.input_historia = TextInput(
             hint_text="Digite sua ideia ou história aqui...",
             multiline=True,
-            size_hint_y=0.3
+            size_hint_y=0.25
         )
         layout.add_widget(self.input_historia)
         
-        label_modelo = Label(text="Motor de Processamento:", size_hint_y=0.05, halign='left')
+        # Seletor de Modelo
+        label_modelo = Label(text="Motor de Processamento:", size_hint_y=0.04, halign='left')
         layout.add_widget(label_modelo)
         
         self.spinner_modelo = Spinner(
             text="Pipeline Completo",
             values=("Pipeline Completo", "Apenas Roteiro", "Apenas Voz"),
-            size_hint_y=0.1,
+            size_hint_y=0.08,
             font_size='16sp'
         )
         layout.add_widget(self.spinner_modelo)
         
+        # Botão de processar
         self.btn_processar = Button(
             text="Gerar Vídeo",
-            size_hint_y=0.1,
+            size_hint_y=0.08,
             font_size='18sp',
             bold=True
         )
         self.btn_processar.bind(on_press=self.iniciar_processamento)
         layout.add_widget(self.btn_processar)
         
+        # Status
         self.label_status = Label(
             text="Aguardando início...",
-            size_hint_y=0.05,
+            size_hint_y=0.04,
             color=(0.5, 0.5, 0.5, 1)
         )
         layout.add_widget(self.label_status)
         
-        scroll = ScrollView(size_hint_y=0.3)
+        # Área de resultado
+        scroll = ScrollView(size_hint_y=0.31)
         self.label_resultado = Label(
             text="",
             size_hint_y=None,
@@ -79,6 +105,30 @@ class DirectorIAApp(App):
         layout.add_widget(scroll)
         
         return layout
+    
+    def get_url_salva(self):
+        """Carrega URL salva nas preferências ou retorna padrão"""
+        from kivy.config import Config
+        try:
+            url = Config.get('directorIA', 'backend_url')
+            if url and url != '':
+                return url
+        except:
+            pass
+        return self.default_url
+    
+    def salvar_url(self, instance, value):
+        """Salva URL nas preferências quando o usuário digita"""
+        if value and value.strip():
+            from kivy.config import Config
+            try:
+                if not Config.has_section('directorIA'):
+                    Config.add_section('directorIA')
+                Config.set('directorIA', 'backend_url', value.strip())
+                Config.write()
+                self.base_url = value.strip()
+            except Exception as e:
+                print(f"[AVISO] Falha ao salvar URL: {e}")
     
     def on_start(self):
         Clock.schedule_once(self._update_text_size, 0.1)
@@ -137,6 +187,18 @@ class DirectorIAApp(App):
     def iniciar_processamento(self, instance):
         if self.processando:
             return
+        
+        # Atualiza URL do campo de texto
+        self.base_url = self.input_url.text.strip()
+        
+        if not self.base_url:
+            self.label_status.text = "Por favor, configure a URL do backend!"
+            return
+        
+        # Remove barra no final se existir
+        if self.base_url.endswith('/'):
+            self.base_url = self.base_url[:-1]
+            self.input_url.text = self.base_url
         
         historia = self.input_historia.text.strip()
         if not historia:
@@ -247,4 +309,4 @@ class DirectorIAApp(App):
 
 
 if __name__ == "__main__":
-    DirectorIAApp().run()
+    DirectorIAApp().run()            
