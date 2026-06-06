@@ -1,4 +1,4 @@
-# name: Android Build
+name: Android Build
 
 on:
   push:
@@ -9,10 +9,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
 
@@ -30,7 +30,7 @@ jobs:
           libportmidi-dev libswscale-dev libavformat-dev \
           libavcodec-dev zlib1g-dev libgstreamer1.0 \
           gstreamer1.0-plugins-base openjdk-17-jdk \
-          autoconf libtool pkg-config
+          autoconf libtool pkg-config unzip zip
 
     - name: Accept Android SDK Licenses
       run: |
@@ -48,7 +48,8 @@ jobs:
         ANDROID_HOME: /usr/lib/android-sdk
 
     - name: Upload APK
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: DirectorIA-APK
         path: bin/*.apk
+        retention-days: 30
